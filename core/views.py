@@ -6,6 +6,11 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 from .services.google_auth import build_google_flow
+from .services.gmail_service import (
+    build_gmail_service,
+    get_message_details,
+    list_messages,
+)
 
 
 @api_view(["GET"])
@@ -66,17 +71,15 @@ def gmail_messages(request):
             status=401
         )
 
-    credentials = Credentials(**creds_data)
-    service = build("gmail", "v1", credentials=credentials)
+    service = build_gmail_service(creds_data)
+    messages = list_messages(service, max_results=10)
 
-    results = service.users().messages().list(
-        userId="me",
-        maxResults=10
-    ).execute()
-
-    messages = results.get("messages", [])
+    detailed_messages = [
+        get_message_details(service, message["id"])
+        for message in messages
+    ]
 
     return JsonResponse({
-        "total": len(messages),
-        "messages": messages,
+        "total": len(detailed_messages),
+        "messages": detailed_messages,
     })
