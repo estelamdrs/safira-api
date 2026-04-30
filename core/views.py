@@ -11,7 +11,7 @@ from .services.gmail_service import (
     get_message_details,
     list_messages,
 )
-from .services.gemini_service import summarize_email_with_gemini
+from .services.gemini_service import GeminiService
 
 # Gmail API
 
@@ -99,7 +99,7 @@ def summarize_email(request):
             status=400,
         )
 
-    result = summarize_email_with_gemini(subject, body)
+    result = GeminiService().summarize_email_gemini(subject, body)
 
     return Response({
         "subject": subject,
