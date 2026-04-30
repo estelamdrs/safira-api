@@ -11,7 +11,9 @@ from .services.gmail_service import (
     get_message_details,
     list_messages,
 )
+from .services.gemini_service import summarize_email_with_gemini
 
+# Gmail API
 
 @api_view(["GET"])
 def health_check(request):
@@ -82,4 +84,24 @@ def gmail_messages(request):
     return JsonResponse({
         "total": len(detailed_messages),
         "messages": detailed_messages,
+    })
+
+# Gemini API
+
+@api_view(["POST"])
+def summarize_email(request):
+    subject = request.data.get("subject", "")
+    body = request.data.get("body", "")
+
+    if not body:
+        return Response(
+            {"error": "O campo 'body' é obrigatório."},
+            status=400,
+        )
+
+    result = summarize_email_with_gemini(subject, body)
+
+    return Response({
+        "subject": subject,
+        "analysis": result,
     })
