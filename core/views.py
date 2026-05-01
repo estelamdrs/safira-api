@@ -4,6 +4,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from .models import EmailSummary
 
 from .services.google_auth import build_google_flow
 from .services.gmail_service import (
@@ -86,7 +87,70 @@ def gmail_messages(request):
         "messages": detailed_messages,
     })
 
-# Gemini API
+@api_view(["POST"])
+def summarize_gmail_message(request, message_id):
+    creds_data = request.session.get("gmail_credentials")
+
+    if not creds_data:
+        return Response(
+            {"error": "Conta Gmail não conectada."},
+            status=401,
+        )
+
+    existing = EmailSummary.objects.filter(
+        gmail_message_id=message_id
+    ).first()
+
+    if existing:
+        return Response({
+            "id": existing.id,
+            "gmail_message_id": existing.gmail_message_id,
+            "subject": existing.subject,
+            "analysis": {
+                "resumo": existing.summary,
+                "urgente": existing.is_urgent,
+                "categoria": existing.category,
+            },
+            "from_cache": True,
+        })
+
+    service = build_gmail_service(creds_data)
+
+    email = get_message_details(service, message_id)
+
+    subject = email.get("subject", "")
+    body = email.get("body", "") or email.get("snippet", "")
+
+    if not body:
+        return Response(
+            {"error": "Não foi possível encontrar conteúdo no e-mail."},
+            status=400,
+        )
+
+    result = GeminiService().summarize_email_gemini(subject, body)
+
+    email_summary = EmailSummary.objects.create(
+        gmail_message_id=message_id,
+        subject=subject,
+        body=body,
+        summary=result.get("resumo", ""),
+        is_urgent=result.get("urgente", False),
+        category=result.get("categoria", "outro"),
+    )
+
+    return Response({
+        "id": email_summary.id,
+        "gmail_message_id": email_summary.gmail_message_id,
+        "subject": email_summary.subject,
+        "analysis": {
+            "resumo": email_summary.summary,
+            "urgente": email_summary.is_urgent,
+            "categoria": email_summary.category,
+        },
+        "from_cache": False
+    })
+
+# Teste Gemini
 
 @api_view(["POST"])
 def summarize_email(request):
@@ -101,7 +165,18 @@ def summarize_email(request):
 
     result = GeminiService().summarize_email_gemini(subject, body)
 
+    email_summary = EmailSummary.objects.create(
+        subject=subject,
+        body=body,
+        summary=result.get("resumo", ""),
+        is_urgent=result.get("urgente", False),
+    )
+
     return Response({
-        "subject": subject,
-        "analysis": result,
+        "id": email_summary.id,
+        "subject": email_summary.subject,
+        "analysis": {
+            "resumo": email_summary.summary,
+            "urgente": email_summary.is_urgent,
+        },
     })
