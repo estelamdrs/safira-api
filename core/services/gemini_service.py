@@ -15,7 +15,7 @@ class GeminiService:
         Não use markdown.
         Não use ```json.
 
-        Classifique o e-mail em UMA das categorias:
+        Classifique o e-mail em UMA categoria:
         - academico
         - trabalho
         - financeiro
@@ -30,6 +30,7 @@ class GeminiService:
         {{
         "resumo": "resumo em até 3 frases",
         "urgente": true,
+        "motivo_urgencia": "explique em uma frase curta",
         "categoria": "academico"
         }}
 
