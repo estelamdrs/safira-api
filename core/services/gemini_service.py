@@ -11,11 +11,15 @@ class GeminiService:
         prompt = f"""
         Você é um assistente de e-mails.
 
-        Analise o e-mail abaixo e responda em JSON válido com:
-        - resumo: resumo em até 3 frases
-        - urgente: true ou false
+        Responda APENAS com JSON válido.
+        Não use markdown.
+        Não use ```json.
 
-        NÃO explique nada fora do JSON.
+        Exemplo de formato obrigatório:
+        {{
+          "resumo": "resumo em até 3 frases",
+          "urgente": true
+        }}
 
         Assunto: {subject}
 
