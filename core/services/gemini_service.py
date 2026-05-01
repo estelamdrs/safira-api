@@ -1,16 +1,21 @@
 from google import genai
 from django.conf import settings
+import json
+
 
 class GeminiService:
     def __init__(self):
         self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
-    def summarize_email_gemini(self, subject: str, body: str) -> str:
+    def summarize_email_gemini(self, subject: str, body: str) -> dict:
         prompt = f"""
         Você é um assistente de e-mails.
 
-        Resuma o e-mail abaixo em até 3 frases, em português.
-        Informe também se parece ser urgente.
+        Analise o e-mail abaixo e responda em JSON válido com:
+        - resumo: resumo em até 3 frases
+        - urgente: true ou false
+
+        NÃO explique nada fora do JSON.
 
         Assunto: {subject}
 
@@ -23,4 +28,11 @@ class GeminiService:
             contents=prompt,
         )
 
-        return response.text
+        try:
+            return json.loads(response.text)
+        except Exception:
+            return {
+                "resumo": response.text,
+                "urgente": False,
+                "erro_parse": True,
+            }
