@@ -45,18 +45,16 @@ class GeminiService:
             contents=prompt,
         )
 
+        text = response.text.strip()
+        text = text.replace("```json", "").replace("```", "").strip()
+
         try:
             return json.loads(response.text)
-        except json.JSONDecodeError:
-            return {
-                "resumo": response.text,
-                "urgente": False,
-                "categoria": "outro",
-                "erro_parse": True,
-            }
         except Exception:
             return {
                 "resumo": response.text,
                 "urgente": False,
+                "motivo_urgencia": "Não foi possível determinar",
+                "categoria": "outro",
                 "erro_parse": True,
             }

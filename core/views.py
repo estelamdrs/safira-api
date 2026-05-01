@@ -109,6 +109,7 @@ def summarize_gmail_message(request, message_id):
             "analysis": {
                 "resumo": existing.summary,
                 "urgente": existing.is_urgent,
+                "motivo_urgencia": email_summary.urgency_reason,
                 "categoria": existing.category,
             },
             "from_cache": True,
@@ -136,6 +137,7 @@ def summarize_gmail_message(request, message_id):
         summary=result.get("resumo", ""),
         is_urgent=result.get("urgente", False),
         category=result.get("categoria", "outro"),
+        urgency_reason=result.get("motivo_urgencia", ""),
     )
 
     return Response({
@@ -145,6 +147,7 @@ def summarize_gmail_message(request, message_id):
         "analysis": {
             "resumo": email_summary.summary,
             "urgente": email_summary.is_urgent,
+            "motivo_urgencia": email_summary.urgency_reason,
             "categoria": email_summary.category,
         },
         "from_cache": False

@@ -6,6 +6,7 @@ class EmailSummary(models.Model):
     body = models.TextField()
     summary = models.TextField()
     is_urgent = models.BooleanField(default=False)
+    urgency_reason = models.TextField(blank=True, default="")
     category = models.CharField(max_length=50, default="outro")
     created_at = models.DateTimeField(auto_now_add=True)
 
