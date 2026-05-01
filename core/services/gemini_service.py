@@ -9,16 +9,28 @@ class GeminiService:
 
     def summarize_email_gemini(self, subject: str, body: str) -> dict:
         prompt = f"""
-        Você é um assistente de e-mails.
+        Você é um assistente inteligente de e-mails.
 
-        Responda APENAS com JSON válido.
+        Analise o e-mail abaixo e responda APENAS com JSON válido.
         Não use markdown.
         Não use ```json.
 
-        Exemplo de formato obrigatório:
+        Classifique o e-mail em UMA das categorias:
+        - academico
+        - trabalho
+        - financeiro
+        - pessoal
+        - marketing
+        - spam
+        - evento
+        - sistema
+        - outro
+
+        Formato obrigatório:
         {{
-          "resumo": "resumo em até 3 frases",
-          "urgente": true
+        "resumo": "resumo em até 3 frases",
+        "urgente": true,
+        "categoria": "academico"
         }}
 
         Assunto: {subject}
@@ -34,6 +46,13 @@ class GeminiService:
 
         try:
             return json.loads(response.text)
+        except json.JSONDecodeError:
+            return {
+                "resumo": response.text,
+                "urgente": False,
+                "categoria": "outro",
+                "erro_parse": True,
+            }
         except Exception:
             return {
                 "resumo": response.text,

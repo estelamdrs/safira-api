@@ -109,8 +109,9 @@ def summarize_gmail_message(request, message_id):
             "analysis": {
                 "resumo": existing.summary,
                 "urgente": existing.is_urgent,
+                "categoria": existing.category,
             },
-            "from_cache": True
+            "from_cache": True,
         })
 
     service = build_gmail_service(creds_data)
@@ -134,6 +135,7 @@ def summarize_gmail_message(request, message_id):
         body=body,
         summary=result.get("resumo", ""),
         is_urgent=result.get("urgente", False),
+        category=result.get("categoria", "outro"),
     )
 
     return Response({
@@ -143,6 +145,7 @@ def summarize_gmail_message(request, message_id):
         "analysis": {
             "resumo": email_summary.summary,
             "urgente": email_summary.is_urgent,
+            "categoria": email_summary.category,
         },
         "from_cache": False
     })
