@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from .models import EmailSummary
+from django.conf import settings
 
 from .services.google_auth import build_google_flow
 from .services.gmail_service import (
@@ -73,7 +74,7 @@ def gmail_callback(request):
         "scopes": credentials.scopes,
     }
 
-    return JsonResponse({"message": "Conta Gmail conectada com sucesso!"})
+    return redirect(f"{settings.FRONTEND_URL}/?gmail_connected=true")
 
 def gmail_messages(request):
     creds_data = request.session.get("gmail_credentials")
@@ -96,6 +97,14 @@ def gmail_messages(request):
         "messages": detailed_messages,
     })
 
+@api_view(["GET"])
+def gmail_status(request):
+    creds_data = request.session.get("gmail_credentials")
+
+    return Response({
+        "connected": bool(creds_data)
+    })
+
 @api_view(["POST"])
 def summarize_gmail_message(request, message_id):
     creds_data = request.session.get("gmail_credentials")
@@ -113,7 +122,7 @@ def summarize_gmail_message(request, message_id):
     ).first()
 
     if existing:
-        label_name = existing.category
+        label_name = existing.category.capitalize()
         label_id = get_or_create_label(service, label_name)
         apply_label_to_message(service, message_id, label_id)
 
@@ -124,7 +133,7 @@ def summarize_gmail_message(request, message_id):
             "analysis": {
                 "resumo": existing.summary,
                 "urgente": existing.is_urgent,
-                "motivo_urgencia": email_summary.urgency_reason,
+                "motivo_urgencia": existing.urgency_reason,
                 "categoria": existing.category,
             },
             "gmail_label": label_name,
