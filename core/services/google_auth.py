@@ -3,7 +3,7 @@ from google_auth_oauthlib.flow import Flow
 
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
-SCOPES = [os.getenv("GOOGLE_OAUTH_SCOPES")]
+SCOPES = os.getenv("GOOGLE_OAUTH_SCOPES", "").split()
 
 def build_google_flow():
     flow = Flow.from_client_config(

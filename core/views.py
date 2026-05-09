@@ -5,12 +5,15 @@ from rest_framework.response import Response
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from .models import EmailSummary
+from django.conf import settings
 
 from .services.google_auth import build_google_flow
 from .services.gmail_service import (
     build_gmail_service,
     get_message_details,
     list_messages,
+    get_or_create_label,
+    apply_label_to_message,
 )
 from .services.gemini_service import GeminiService
 
@@ -24,6 +27,10 @@ def health_check(request):
     })
 
 def gmail_auth(request):
+    request.session.pop("gmail_credentials", None)
+    request.session.pop("google_oauth_state", None)
+    request.session.pop("google_code_verifier", None)
+
     flow = build_google_flow()
 
     authorization_url, state = flow.authorization_url(
@@ -51,7 +58,10 @@ def gmail_callback(request):
     flow.state = state
     flow.code_verifier = code_verifier
 
-    flow.fetch_token(authorization_response=request.build_absolute_uri())
+    flow.fetch_token(
+        authorization_response=request.build_absolute_uri(),
+        code_verifier=code_verifier,
+    )
 
     credentials = flow.credentials
 
@@ -64,7 +74,7 @@ def gmail_callback(request):
         "scopes": credentials.scopes,
     }
 
-    return JsonResponse({"message": "Conta Gmail conectada com sucesso!"})
+    return redirect(f"{settings.FRONTEND_URL}/?gmail_connected=true")
 
 def gmail_messages(request):
     creds_data = request.session.get("gmail_credentials")
@@ -87,6 +97,14 @@ def gmail_messages(request):
         "messages": detailed_messages,
     })
 
+@api_view(["GET"])
+def gmail_status(request):
+    creds_data = request.session.get("gmail_credentials")
+
+    return Response({
+        "connected": bool(creds_data)
+    })
+
 @api_view(["POST"])
 def summarize_gmail_message(request, message_id):
     creds_data = request.session.get("gmail_credentials")
@@ -97,11 +115,17 @@ def summarize_gmail_message(request, message_id):
             status=401,
         )
 
+    service = build_gmail_service(creds_data)
+
     existing = EmailSummary.objects.filter(
         gmail_message_id=message_id
     ).first()
 
     if existing:
+        label_name = existing.category.capitalize()
+        label_id = get_or_create_label(service, label_name)
+        apply_label_to_message(service, message_id, label_id)
+
         return Response({
             "id": existing.id,
             "gmail_message_id": existing.gmail_message_id,
@@ -109,12 +133,13 @@ def summarize_gmail_message(request, message_id):
             "analysis": {
                 "resumo": existing.summary,
                 "urgente": existing.is_urgent,
+                "motivo_urgencia": existing.urgency_reason,
                 "categoria": existing.category,
             },
+            "gmail_label": label_name,
             "from_cache": True,
         })
 
-    service = build_gmail_service(creds_data)
 
     email = get_message_details(service, message_id)
 
@@ -129,13 +154,19 @@ def summarize_gmail_message(request, message_id):
 
     result = GeminiService().summarize_email_gemini(subject, body)
 
+    category = result.get("categoria", "outro")
+    label_name = category.capitalize()
+    label_id = get_or_create_label(service, label_name)
+    apply_label_to_message(service, message_id, label_id)
+
     email_summary = EmailSummary.objects.create(
         gmail_message_id=message_id,
         subject=subject,
         body=body,
         summary=result.get("resumo", ""),
         is_urgent=result.get("urgente", False),
-        category=result.get("categoria", "outro"),
+        category=category,
+        urgency_reason=result.get("motivo_urgencia", ""),
     )
 
     return Response({
@@ -145,9 +176,22 @@ def summarize_gmail_message(request, message_id):
         "analysis": {
             "resumo": email_summary.summary,
             "urgente": email_summary.is_urgent,
+            "motivo_urgencia": email_summary.urgency_reason,
             "categoria": email_summary.category,
         },
+        "gmail_label": label_name,
         "from_cache": False
+    })
+
+@api_view(["POST"])
+def gmail_disconnect(request):
+    request.session.pop("gmail_credentials", None)
+    request.session.pop("google_oauth_state", None)
+    request.session.pop("google_code_verifier", None)
+
+    return Response({
+        "message": "Conta Gmail desconectada com sucesso.",
+        "connected": False,
     })
 
 # Teste Gemini
