@@ -183,6 +183,17 @@ def summarize_gmail_message(request, message_id):
         "from_cache": False
     })
 
+@api_view(["POST"])
+def gmail_disconnect(request):
+    request.session.pop("gmail_credentials", None)
+    request.session.pop("google_oauth_state", None)
+    request.session.pop("google_code_verifier", None)
+
+    return Response({
+        "message": "Conta Gmail desconectada com sucesso.",
+        "connected": False,
+    })
+
 # Teste Gemini
 
 @api_view(["POST"])

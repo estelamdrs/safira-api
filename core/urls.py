@@ -7,6 +7,7 @@ from .views import (
     summarize_email,
     summarize_gmail_message,
     gmail_status,
+    gmail_disconnect,
 )
 
 urlpatterns = [
@@ -21,4 +22,5 @@ urlpatterns = [
     ),
     path("gmail/status/", gmail_status, name="gmail_status"),
     path("llm/summarize-email/", summarize_email, name="summarize_email"),
+    path("gmail/disconnect/", gmail_disconnect, name="gmail_disconnect"),
 ]
