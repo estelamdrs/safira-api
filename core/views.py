@@ -13,6 +13,7 @@ from .services.gmail_service import (
     get_message_details,
     list_messages,
     get_or_create_label,
+    list_gmail_labels,
     apply_label_to_message,
 )
 from .services.gemini_service import GeminiService
@@ -152,10 +153,17 @@ def summarize_gmail_message(request, message_id):
             status=400,
         )
 
-    result = GeminiService().summarize_email_gemini(subject, body)
+    existing_labels = list_gmail_labels(service)
+    existing_label_names = [label["name"] for label in existing_labels]
+
+    result = GeminiService().summarize_email_gemini(
+        subject,
+        body,
+        existing_label_names,
+    )
 
     category = result.get("categoria", "outro")
-    label_name = category.capitalize()
+    label_name = result.get("gmail_label") or category.capitalize()
     label_id = get_or_create_label(service, label_name)
     apply_label_to_message(service, message_id, label_id)
 

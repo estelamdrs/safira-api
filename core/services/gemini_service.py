@@ -7,11 +7,22 @@ class GeminiService:
     def __init__(self):
         self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
-    def summarize_email_gemini(self, subject: str, body: str) -> dict:
+    def summarize_email_gemini(
+        self,
+        subject: str,
+        body: str,
+        existing_labels: list[str] | None = None
+    ) -> dict:
+        existing_labels = existing_labels or []
+        labels_text = "\n".join(f"- {label}" for label in existing_labels)
+
         prompt = f"""
         Você é a Safira, uma assistente inteligente de organização de e-mails.
 
         Sua função é analisar o conteúdo de um e-mail e produzir uma resposta estruturada para ajudar o usuário a entender, priorizar e organizar sua caixa de entrada.
+
+        Marcadores já existentes no Gmail do usuário:
+        {labels_text if labels_text else "- Nenhum marcador personalizado encontrado."}
 
         Regras gerais:
         - Responda APENAS com JSON válido.
@@ -20,6 +31,9 @@ class GeminiService:
         - Não invente informações que não estejam no e-mail.
         - Se alguma informação não estiver clara, indique isso no campo adequado.
         - Use linguagem objetiva, profissional e em português do Brasil.
+        - Se algum marcador existente combinar semanticamente com o e-mail, reutilize esse marcador exatamente como escrito.
+        - Se nenhum marcador existente fizer sentido, sugira um novo marcador curto e claro.
+        - Não crie marcador novo se um existente já representar bem o assunto.
 
         Critérios de análise:
         1. Resumo:
@@ -58,7 +72,9 @@ class GeminiService:
         "motivo_urgencia": "explique em uma frase curta por que é urgente ou por que não é",
         "categoria": "academico",
         "confianca": 0.95,
-        "justificativa_categoria": "explique em uma frase curta por que essa categoria foi escolhida"
+        "justificativa_categoria": "explique em uma frase curta por que essa categoria foi escolhida",
+        "gmail_label": "nome do marcador escolhido ou sugerido",
+        "usar_label_existente": true
         }}
 
         E-mail para análise:

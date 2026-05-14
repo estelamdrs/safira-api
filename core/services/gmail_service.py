@@ -73,6 +73,20 @@ def get_or_create_label(service, label_name: str) -> str:
                 return label["id"]
 
         raise
+
+def list_gmail_labels(service):
+    response = service.users().labels().list(userId="me").execute()
+    labels = response.get("labels", [])
+
+    return [
+        {
+            "id": label.get("id"),
+            "name": label.get("name"),
+            "type": label.get("type"),
+        }
+        for label in labels
+        if label.get("type") == "user"
+    ]
     
 def apply_label_to_message(service, message_id: str, label_id: str):
     return service.users().messages().modify(
