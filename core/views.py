@@ -18,8 +18,6 @@ from .services.gmail_service import (
 )
 from .services.gemini_service import GeminiService
 
-# Gmail API
-
 @api_view(["GET"])
 def health_check(request):
     return Response({
@@ -118,14 +116,14 @@ def summarize_gmail_message(request, message_id):
 
     service = build_gmail_service(creds_data)
 
+    force_refresh = request.data.get("force_refresh", False)
+
     existing = EmailSummary.objects.filter(
         gmail_message_id=message_id
     ).first()
 
-    if existing:
+    if existing and not force_refresh:
         label_name = existing.category.capitalize()
-        label_id = get_or_create_label(service, label_name)
-        apply_label_to_message(service, message_id, label_id)
 
         return Response({
             "id": existing.id,
@@ -137,7 +135,8 @@ def summarize_gmail_message(request, message_id):
                 "motivo_urgencia": existing.urgency_reason,
                 "categoria": existing.category,
             },
-            "gmail_label": label_name,
+            "suggested_label": label_name,
+            "label_applied": False,
             "from_cache": True,
         })
 
@@ -164,17 +163,16 @@ def summarize_gmail_message(request, message_id):
 
     category = result.get("categoria", "outro")
     label_name = result.get("gmail_label") or category.capitalize()
-    label_id = get_or_create_label(service, label_name)
-    apply_label_to_message(service, message_id, label_id)
 
-    email_summary = EmailSummary.objects.create(
+    email_summary, _ = EmailSummary.objects.update_or_create(
         gmail_message_id=message_id,
-        subject=subject,
-        body=body,
-        summary=result.get("resumo", ""),
-        is_urgent=result.get("urgente", False),
-        category=category,
-        urgency_reason=result.get("motivo_urgencia", ""),
+        defaults={
+            "subject": subject,
+            "summary": result.get("resumo", ""),
+            "category": category,
+            "is_urgent": result.get("urgente", False),
+            "urgency_reason": result.get("motivo_urgencia", ""),
+        }
     )
 
     return Response({
@@ -187,7 +185,8 @@ def summarize_gmail_message(request, message_id):
             "motivo_urgencia": email_summary.urgency_reason,
             "categoria": email_summary.category,
         },
-        "gmail_label": label_name,
+        "suggested_label": label_name,
+        "label_applied": False,
         "from_cache": False
     })
 
@@ -200,6 +199,36 @@ def gmail_disconnect(request):
     return Response({
         "message": "Conta Gmail desconectada com sucesso.",
         "connected": False,
+    })
+
+@api_view(["POST"])
+def apply_gmail_label(request, message_id):
+    creds_data = request.session.get("gmail_credentials")
+
+    if not creds_data:
+        return Response(
+            {"error": "Conta Gmail não conectada."},
+            status=401,
+        )
+
+    label_name = request.data.get("label_name")
+
+    if not label_name:
+        return Response(
+            {"error": "O campo 'label_name' é obrigatório."},
+            status=400,
+        )
+
+    service = build_gmail_service(creds_data)
+
+    label_id = get_or_create_label(service, label_name)
+    apply_label_to_message(service, message_id, label_id)
+
+    return Response({
+        "message": "Marcador aplicado com sucesso.",
+        "gmail_message_id": message_id,
+        "gmail_label": label_name,
+        "label_applied": True,
     })
 
 # Teste Gemini
