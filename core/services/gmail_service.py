@@ -42,13 +42,17 @@ def extract_attachments(payload: dict) -> list[dict]:
 
     return attachments
 
-def list_messages(service, max_results: int = 10):
+def list_messages(service, max_results: int = 10, page_token: str = None):
     results = service.users().messages().list(
         userId="me",
         maxResults=max_results,
+        pageToken=page_token,
     ).execute()
 
-    return results.get("messages", [])
+    return {
+        "messages": results.get("messages", []),
+        "next_page_token": results.get("nextPageToken"),
+    }
 
 def get_message_details(service, message_id: str) -> dict:
     message = service.users().messages().get(

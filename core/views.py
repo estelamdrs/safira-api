@@ -84,7 +84,15 @@ def gmail_messages(request):
         )
 
     service = build_gmail_service(creds_data)
-    messages = list_messages(service, max_results=10)
+    page_token = request.GET.get("page_token")
+
+    results = list_messages(
+        service,
+        max_results=10,
+        page_token=page_token,
+    )
+
+    messages = results["messages"]
 
     detailed_messages = [
         get_message_details(service, message["id"])
@@ -94,6 +102,7 @@ def gmail_messages(request):
     return JsonResponse({
         "total": len(detailed_messages),
         "messages": detailed_messages,
+        "next_page_token": results["next_page_token"],
     })
 
 @api_view(["GET"])
