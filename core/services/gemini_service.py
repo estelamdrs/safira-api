@@ -34,6 +34,8 @@ class GeminiService:
         - Se algum marcador existente combinar semanticamente com o e-mail, reutilize esse marcador exatamente como escrito.
         - Se nenhum marcador existente fizer sentido, sugira um novo marcador curto e claro.
         - Não crie marcador novo se um existente já representar bem o assunto.
+        - Se o e-mail não possui conteúdo textual relevante e contém anexos, classifique como "arquivos" e sugira o marcador "Arquivos".
+        - Não tente inferir o conteúdo interno dos anexos, pois eles não foram lidos.
 
         Critérios de análise:
         1. Resumo:

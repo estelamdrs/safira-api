@@ -145,6 +145,20 @@ def summarize_gmail_message(request, message_id):
 
     subject = email.get("subject", "")
     body = email.get("body", "") or email.get("snippet", "")
+    has_attachments = email.get("has_attachments", False)
+    attachments = email.get("attachments", [])
+
+    if not body and has_attachments:
+        attachment_names = ", ".join(
+            attachment.get("filename", "arquivo sem nome")
+            for attachment in attachments
+        )
+
+        body = (
+            "Este e-mail não possui conteúdo textual disponível, "
+            "mas contém anexos. "
+            f"Arquivos encontrados: {attachment_names}."
+        )
 
     if not body:
         return Response(

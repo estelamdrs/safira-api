@@ -1,5 +1,6 @@
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
+from googleapiclient.errors import HttpError
 
 
 def build_gmail_service(creds_data: dict):
@@ -18,6 +19,29 @@ def extract_headers(payload: dict) -> dict:
 
     return header_map
 
+def extract_attachments(payload: dict) -> list[dict]:
+    attachments = []
+
+    def walk_parts(part: dict):
+        filename = part.get("filename")
+        body = part.get("body", {})
+        attachment_id = body.get("attachmentId")
+
+        if filename and attachment_id:
+            attachments.append({
+                "filename": filename,
+                "mime_type": part.get("mimeType"),
+                "attachment_id": attachment_id,
+                "size": body.get("size"),
+            })
+
+        for child_part in part.get("parts", []):
+            walk_parts(child_part)
+
+    walk_parts(payload)
+
+    return attachments
+
 def list_messages(service, max_results: int = 10):
     results = service.users().messages().list(
         userId="me",
@@ -30,12 +54,12 @@ def get_message_details(service, message_id: str) -> dict:
     message = service.users().messages().get(
         userId="me",
         id=message_id,
-        format="metadata",
-        metadataHeaders=["Subject", "From", "Date"],
+        format="full",
     ).execute()
 
     payload = message.get("payload", {})
     headers = extract_headers(payload)
+    attachments = extract_attachments(payload)
 
     return {
         "id": message.get("id"),
@@ -44,6 +68,8 @@ def get_message_details(service, message_id: str) -> dict:
         "from": headers.get("From"),
         "date": headers.get("Date"),
         "snippet": message.get("snippet"),
+        "has_attachments": len(attachments) > 0,
+        "attachments": attachments,
     }
 
 def get_or_create_label(service, label_name: str) -> str:
