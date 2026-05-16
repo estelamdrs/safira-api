@@ -105,3 +105,44 @@ class GeminiService:
                 "categoria": "outro",
                 "erro_parse": True,
             }
+
+    def suggest_email_reply_gemini(self, subject, body):
+        prompt = f"""
+        Você é uma assistente inteligente de e-mails.
+
+        Sua tarefa é sugerir uma resposta educada, objetiva e coerente
+        para o e-mail abaixo.
+
+        Regras:
+        - Responda apenas com JSON válido
+        - Não use markdown
+        - Não use ```json
+        - A resposta deve soar natural e humana
+        - Se o e-mail for acadêmico, mantenha tom formal
+        - Se o e-mail for pessoal, o tom pode ser mais leve
+        - Nunca invente informações que não estejam no e-mail
+        - Se o e-mail não exigir resposta, informe isso
+
+        Formato obrigatório:
+        {{
+        "needs_reply": true,
+        "suggested_reply": "texto da resposta sugerida"
+        }}
+
+        Assunto:
+        {subject}
+
+        Conteúdo:
+        {body}
+        """
+
+        response = self.model.generate_content(prompt)
+
+        cleaned_text = (
+            respose.text
+            .replace("```json", "")
+            .replace("```", "")
+            .strip()
+        )
+
+        return json.loads(cleaned_text)
