@@ -136,10 +136,13 @@ class GeminiService:
         {body}
         """
 
-        response = self.model.generate_content(prompt)
+        response = self.client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=prompt,
+        )
 
         cleaned_text = (
-            respose.text
+            response.text
             .replace("```json", "")
             .replace("```", "")
             .strip()

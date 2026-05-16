@@ -254,6 +254,39 @@ def apply_gmail_label(request, message_id):
         "label_applied": True,
     })
 
+@api_view(["POST"])
+def suggest_gmail_reply(request, message_id):
+    creds_data = request.session.get("gmail_credentials")
+
+    if not creds_data:
+        return Response(
+            {"error": "Conta Gmail não conectada."},
+            status=401,
+        )
+
+    service = build_gmail_service(creds_data)
+
+    email = get_message_details(service, message_id)
+
+    subject = email.get("subject", "")
+
+    body = email.get("body", "") or email.get("snippet", "")
+
+    if not body:
+        return Response(
+            {"error": "Não foi possível encontrar conteúdo textual no e-mail."},
+            status=400,
+        )
+
+    result = GeminiService().suggest_email_reply_gemini(subject, body)
+
+    return Response({
+        "gmail_message_id": message_id,
+        "subject": subject,
+        "needs_reply": result.get("needs_reply", False),
+        "suggested_reply": result.get("suggested_reply", ""),
+    })
+
 # Teste Gemini
 
 @api_view(["POST"])
