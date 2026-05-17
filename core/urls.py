@@ -10,6 +10,7 @@ from .views import (
     gmail_disconnect,
     apply_gmail_label,
     suggest_gmail_reply,
+    send_gmail_reply,
 )
 
 urlpatterns = [
@@ -34,5 +35,10 @@ urlpatterns = [
         "gmail/messages/<str:message_id>/suggest-reply/",
         suggest_gmail_reply,
         name="suggest_gmail_reply",
+    ),
+    path(
+        "gmail/messages/<str:message_id>/send-reply/",
+        send_gmail_reply,
+        name="send_gmail_reply",
     ),
 ]
