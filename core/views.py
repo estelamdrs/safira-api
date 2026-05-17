@@ -153,7 +153,7 @@ def summarize_gmail_message(request, message_id):
 
     email = get_message_details(service, message_id)
 
-    subject = email.get("subject", "")
+    subject = email.get("subject") or "Sem assunto"
     body = email.get("body", "") or email.get("snippet", "")
     has_attachments = email.get("has_attachments", False)
     attachments = email.get("attachments", [])

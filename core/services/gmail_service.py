@@ -69,7 +69,7 @@ def get_message_details(service, message_id: str) -> dict:
     return {
         "id": message.get("id"),
         "threadId": message.get("threadId"),
-        "subject": headers.get("Subject"),
+        "subject": headers.get("Subject") or "Sem assunto",
         "from": headers.get("From"),
         "date": headers.get("Date"),
         "snippet": message.get("snippet"),
