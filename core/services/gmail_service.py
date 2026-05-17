@@ -1,7 +1,8 @@
+import base64
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from googleapiclient.errors import HttpError
-
+from email.mime.text import MIMEText
 
 def build_gmail_service(creds_data: dict):
     credentials = Credentials(**creds_data)
@@ -125,4 +126,21 @@ def apply_label_to_message(service, message_id: str, label_id: str):
         body={
             "addLabelIds": [label_id],
         }
+    ).execute()
+
+def send_reply(service, to_email: str, subject: str, body: str):
+    message = MIMEText(body)
+
+    message["to"] = to_email
+    message["subject"] = f"Re: {subject}"
+
+    raw_message = base64.urlsafe_b64encode(
+        message.as_bytes()
+    ).decode()
+
+    return service.users().messages().send(
+        userId="me",
+        body={
+            "raw": raw_message,
+        },
     ).execute()
