@@ -15,6 +15,7 @@ from .services.gmail_service import (
     get_or_create_label,
     list_gmail_labels,
     apply_label_to_message,
+    send_reply,
 )
 from .services.gemini_service import GeminiService
 
@@ -152,7 +153,7 @@ def summarize_gmail_message(request, message_id):
 
     email = get_message_details(service, message_id)
 
-    subject = email.get("subject", "")
+    subject = email.get("subject") or "Sem assunto"
     body = email.get("body", "") or email.get("snippet", "")
     has_attachments = email.get("has_attachments", False)
     attachments = email.get("attachments", [])
@@ -252,6 +253,76 @@ def apply_gmail_label(request, message_id):
         "gmail_message_id": message_id,
         "gmail_label": label_name,
         "label_applied": True,
+    })
+
+@api_view(["POST"])
+def suggest_gmail_reply(request, message_id):
+    creds_data = request.session.get("gmail_credentials")
+
+    if not creds_data:
+        return Response(
+            {"error": "Conta Gmail não conectada."},
+            status=401,
+        )
+
+    service = build_gmail_service(creds_data)
+
+    email = get_message_details(service, message_id)
+
+    subject = email.get("subject", "")
+
+    body = email.get("body", "") or email.get("snippet", "")
+
+    if not body:
+        return Response(
+            {"error": "Não foi possível encontrar conteúdo textual no e-mail."},
+            status=400,
+        )
+
+    result = GeminiService().suggest_email_reply_gemini(subject, body)
+
+    return Response({
+        "gmail_message_id": message_id,
+        "subject": subject,
+        "needs_reply": result.get("needs_reply", False),
+        "suggested_reply": result.get("suggested_reply", ""),
+    })
+
+@api_view(["POST"])
+def send_gmail_reply(request, message_id):
+    creds_data = request.session.get("gmail_credentials")
+
+    if not creds_data:
+        return Response(
+            {"error": "Conta Gmail não conectada."},
+            status=401,
+        )
+
+    reply_body = request.data.get("reply")
+
+    if not reply_body:
+        return Response(
+            {"error": "Resposta não informada."},
+            status=400,
+        )
+
+    service = build_gmail_service(creds_data)
+
+    email = get_message_details(service, message_id)
+
+    to_email = email.get("from")
+    subject = email.get("subject")
+
+    send_reply(
+        service=service,
+        to_email=to_email,
+        subject=subject,
+        body=reply_body,
+    )
+
+    return Response({
+        "success": True,
+        "message": "Resposta enviada com sucesso.",
     })
 
 # Teste Gemini
