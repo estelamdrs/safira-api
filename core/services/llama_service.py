@@ -63,6 +63,10 @@ def summarize_email_llama(
         - Se o e-mail envolver TCC, orientação, universidade ou pesquisa, priorize "academico".
         - Se o e-mail for principalmente compartilhamento de arquivo, pasta, documento ou anexo, use "arquivos", salvo se houver contexto acadêmico ou financeiro mais forte.
 
+        Não escreva frases como "Aqui está o resumo".
+        Não coloque JSON dentro do campo resumo.
+        O campo resumo deve conter apenas o resumo textual do e-mail.
+
         Formato obrigatório:
         {{
         "resumo": "resumo em até 3 frases",
@@ -101,12 +105,25 @@ def summarize_email_llama(
     text = text.replace("```json", "").replace("```", "").strip()
 
     try:
-        return json.loads(text)
+        parsed = json.loads(text)
+
+        if (
+            isinstance(parsed.get("resumo"), str)
+            and parsed["resumo"].strip().startswith("{")
+        ):
+            nested = json.loads(parsed["resumo"])
+            return nested
+
+        return parsed
     except Exception:
         return {
             "resumo": text,
             "urgente": False,
-            "motivo_urgencia": "Não foi possível determinar",
+            "motivo_urgencia": "Não foi possível determinar.",
             "categoria": "outro",
+            "confianca": 0,
+            "justificativa_categoria": "A resposta do modelo não retornou JSON válido.",
+            "gmail_label": "Outro",
+            "usar_label_existente": False,
             "erro_parse": True,
         }
