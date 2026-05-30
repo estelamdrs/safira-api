@@ -12,7 +12,8 @@ from .views import (
     suggest_gmail_reply,
     send_gmail_reply,
     summarize_email_llama_view,
-    compare_email_llms
+    compare_email_llms,
+    register_llm_preference
 )
 
 urlpatterns = [
@@ -52,5 +53,10 @@ urlpatterns = [
         "llm/compare-email/",
         compare_email_llms,
         name="compare_email_llms"
+    ),
+    path(
+        "llm/register-preference/",
+        register_llm_preference,
+        name="register_llm_preference"
     ),
 ]

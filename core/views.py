@@ -4,7 +4,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from .models import EmailSummary
+from .models import EmailSummary, LLMPreferenceLog
 from django.conf import settings
 from core.services.llama_service import summarize_email_llama
 
@@ -418,6 +418,38 @@ def compare_email_llms(request):
         },
         "errors": errors,
     })
+
+
+@api_view(["POST"])
+def register_llm_preference(request):
+    email_id = request.data.get("email_id")
+    provider = request.data.get("provider")
+    action = request.data.get("action")
+
+    if not all([email_id, provider, action]):
+        return Response(
+            {
+                "error": (
+                    "email_id, provider e action "
+                    "são obrigatórios."
+                )
+            },
+            status=400,
+        )
+
+    log = LLMPreferenceLog.objects.create(
+        email_id=email_id,
+        provider=provider,
+        action=action,
+    )
+
+    return Response(
+        {
+            "id": log.id,
+            "message": "Preferência registrada com sucesso.",
+        }
+    )
+
 
 # Teste Gemini
 
