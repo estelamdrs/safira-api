@@ -83,30 +83,30 @@ def summarize_email_llama(
         {body}
         """
 
-        payload = {
-            "model": settings.OLLAMA_MODEL,
-            "prompt": prompt,
-            "stream": False,
+    payload = {
+        "model": settings.OLLAMA_MODEL,
+        "prompt": prompt,
+        "stream": False,
+    }
+
+    response = requests.post(
+        settings.OLLAMA_URL,
+        json=payload,
+        timeout=90
+    )
+    response.raise_for_status()
+
+    data = response.json()
+    text = data.get("response", "").strip()
+    text = text.replace("```json", "").replace("```", "").strip()
+
+    try:
+        return json.loads(text)
+    except Exception:
+        return {
+            "resumo": text,
+            "urgente": False,
+            "motivo_urgencia": "Não foi possível determinar",
+            "categoria": "outro",
+            "erro_parse": True,
         }
-
-        response = requests.post(
-            settings.OLLAMA_URL,
-            json=payload,
-            timeout=90
-        )
-        response.raise_for_status()
-
-        data = response.json()
-        text = data.get("response", "").strip()
-        text = text.replace("```json", "").replace("```", "").strip()
-
-        try:
-            return json.loads(text)
-        except Exception:
-            return {
-                "resumo": text,
-                "urgente": False,
-                "motivo_urgencia": "Não foi possível determinar",
-                "categoria": "outro",
-                "erro_parse": True,
-            }

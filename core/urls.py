@@ -11,6 +11,8 @@ from .views import (
     apply_gmail_label,
     suggest_gmail_reply,
     send_gmail_reply,
+    summarize_email_llama_view,
+    compare_email_llms
 )
 
 urlpatterns = [
@@ -40,5 +42,15 @@ urlpatterns = [
         "gmail/messages/<str:message_id>/send-reply/",
         send_gmail_reply,
         name="send_gmail_reply",
+    ),
+    path(
+        "llm/summarize-email-llama/",
+        summarize_email_llama_view,
+        name="summarize_email_llama"
+    ),
+    path(
+        "llm/compare-email/",
+        compare_email_llms,
+        name="compare_email_llms"
     ),
 ]
