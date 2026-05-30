@@ -7,6 +7,7 @@ from googleapiclient.discovery import build
 from .models import EmailSummary, LLMPreferenceLog
 from django.conf import settings
 from core.services.llama_service import summarize_email_llama
+from django.db.models import Count
 
 from .services.google_auth import build_google_flow
 from .services.gmail_service import (
@@ -449,6 +450,31 @@ def register_llm_preference(request):
             "message": "Preferência registrada com sucesso.",
         }
     )
+
+
+@api_view(["GET"])
+def llm_preference_stats(request):
+    stats = (
+        LLMPreferenceLog.objects
+        .values("provider")
+        .annotate(total=Count("id"))
+        .order_by("provider")
+    )
+
+    result = {
+        "gemini": 0,
+        "llama": 0,
+        "total": 0,
+    }
+
+    for item in stats:
+        provider = item["provider"]
+        total = item["total"]
+
+        result[provider] = total
+        result["total"] += total
+
+    return Response(result)
 
 
 # Teste Gemini

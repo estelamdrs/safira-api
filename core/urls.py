@@ -13,7 +13,8 @@ from .views import (
     send_gmail_reply,
     summarize_email_llama_view,
     compare_email_llms,
-    register_llm_preference
+    register_llm_preference,
+    llm_preference_stats
 )
 
 urlpatterns = [
@@ -59,4 +60,8 @@ urlpatterns = [
         register_llm_preference,
         name="register_llm_preference"
     ),
+    path(
+        "llm/stats/",
+        llm_preference_stats,
+        name='llm_preference_stats'),
 ]
