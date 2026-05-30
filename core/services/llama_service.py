@@ -1,22 +1,18 @@
-from google import genai
-from django.conf import settings
+import requests
 import json
 
+from django.conf import settings
 
-class GeminiService:
-    def __init__(self):
-        self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
-    def summarize_email_gemini(
-        self,
-        subject: str,
-        body: str,
-        existing_labels: list[str] | None = None
-    ) -> dict:
-        existing_labels = existing_labels or []
-        labels_text = "\n".join(f"- {label}" for label in existing_labels)
-
-        prompt = f"""
+def summarize_email_llama(
+    subject: str,
+    body: str,
+    existing_labels: list[str] | None = None
+) -> dict:
+    existing_labels = existing_labels or []
+    labels_text = "\n".join(f"- {label}" for label in existing_labels)
+    
+    prompt = f"""
         Você é a Safira, uma assistente inteligente de organização de e-mails.
 
         Sua função é analisar o conteúdo de um e-mail e produzir uma resposta estruturada para ajudar o usuário a entender, priorizar e organizar sua caixa de entrada.
@@ -87,65 +83,30 @@ class GeminiService:
         {body}
         """
 
-        response = self.client.models.generate_content(
-            model="gemini-2.5-flash-lite",
-            contents=prompt,
-        )
+        payload = {
+            "model": settings.OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False,
+        }
 
-        text = response.text.strip()
+        response = requests.post(
+            settings.OLLAMA_URL,
+            json=payload,
+            timeout=90
+        )
+        response.raise_for_status()
+
+        data = response.json()
+        text = data.get("response", "").strip()
         text = text.replace("```json", "").replace("```", "").strip()
 
         try:
             return json.loads(text)
         except Exception:
             return {
-                "resumo": response.text,
+                "resumo": text,
                 "urgente": False,
                 "motivo_urgencia": "Não foi possível determinar",
                 "categoria": "outro",
                 "erro_parse": True,
             }
-
-    def suggest_email_reply_gemini(self, subject, body):
-        prompt = f"""
-        Você é uma assistente inteligente de e-mails.
-
-        Sua tarefa é sugerir uma resposta educada, objetiva e coerente
-        para o e-mail abaixo.
-
-        Regras:
-        - Responda apenas com JSON válido
-        - Não use markdown
-        - Não use ```json
-        - A resposta deve soar natural e humana
-        - Se o e-mail for acadêmico, mantenha tom formal
-        - Se o e-mail for pessoal, o tom pode ser mais leve
-        - Nunca invente informações que não estejam no e-mail
-        - Se o e-mail não exigir resposta, informe isso
-
-        Formato obrigatório:
-        {{
-        "needs_reply": true,
-        "suggested_reply": "texto da resposta sugerida"
-        }}
-
-        Assunto:
-        {subject}
-
-        Conteúdo:
-        {body}
-        """
-
-        response = self.client.models.generate_content(
-            model="gemini-2.5-flash-lite",
-            contents=prompt,
-        )
-
-        cleaned_text = (
-            response.text
-            .replace("```json", "")
-            .replace("```", "")
-            .strip()
-        )
-
-        return json.loads(cleaned_text)
