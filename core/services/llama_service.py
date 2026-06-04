@@ -177,7 +177,16 @@ def suggest_email_reply_llama(subject: str, body: str) -> dict:
     text = text.replace("```json", "").replace("```", "").strip()
 
     try:
-        return json.loads(text)
+        parsed = json.loads(text)
+
+        if (
+            isinstance(parsed.get("suggested_reply"), str)
+            and parsed["suggested_reply"].strip().startswith("{")
+        ):
+            nested = json.loads(parsed["suggested_reply"])
+            return nested
+
+        return parsed
     except Exception:
         return {
             "needs_reply": True,
