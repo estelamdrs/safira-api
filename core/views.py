@@ -462,22 +462,23 @@ def register_llm_preference(request):
 def llm_preference_stats(request):
     stats = (
         LLMPreferenceLog.objects
-        .values("provider")
+        .values("provider", "action")
         .annotate(total=Count("id"))
-        .order_by("provider")
+        .order_by("provider", "action")
     )
 
     result = {
-        "gemini": 0,
-        "llama": 0,
+        "gemini": {},
+        "llama": {},
         "total": 0,
     }
 
     for item in stats:
         provider = item["provider"]
+        action = item["action"]
         total = item["total"]
 
-        result[provider] = total
+        result[provider][action] = total
         result["total"] += total
 
     return Response(result)

@@ -21,8 +21,12 @@ class LLMPreferenceLog(models.Model):
 
     ACTIONS = [
         ("apply_label", "Apply Label"),
-        ("suggest_reply", "Suggest Reply"),
         ("send_reply", "Send Reply"),
+        ("category_ok", "Categoria correta"),
+        ("category_not_ok", "Categoria incorreta"),
+        ("reply_good", "Resposta boa"),
+        ("reply_medium", "Resposta média"),
+        ("reply_bad", "Resposta ruim"),
     ]
 
     email_id = models.CharField(max_length=255)
