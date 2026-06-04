@@ -127,3 +127,60 @@ def summarize_email_llama(
             "usar_label_existente": False,
             "erro_parse": True,
         }
+
+
+def suggest_email_reply_llama(subject: str, body: str) -> dict:
+    prompt = f"""
+        Você é uma assistente inteligente de e-mails.
+
+        Sua tarefa é sugerir uma resposta educada, objetiva e coerente
+        para o e-mail abaixo.
+
+        Regras:
+        - Responda apenas com JSON válido
+        - Não use markdown
+        - Não use ```json
+        - A resposta deve soar natural e humana
+        - Se o e-mail for acadêmico, mantenha tom formal
+        - Se o e-mail for pessoal, o tom pode ser mais leve
+        - Nunca invente informações que não estejam no e-mail
+        - Se o e-mail não exigir resposta, informe isso
+
+        Formato obrigatório:
+        {{
+        "needs_reply": true,
+        "suggested_reply": "texto da resposta sugerida"
+        }}
+
+        Assunto:
+        {subject}
+
+        Conteúdo:
+        {body}
+        """
+
+    payload = {
+        "model": settings.OLLAMA_MODEL,
+        "prompt": prompt,
+        "stream": False,
+    }
+
+    response = requests.post(
+        settings.OLLAMA_URL,
+        json=payload,
+        timeout=90,
+    )
+    response.raise_for_status()
+
+    data = response.json()
+    text = data.get("response", "").strip()
+    text = text.replace("```json", "").replace("```", "").strip()
+
+    try:
+        return json.loads(text)
+    except Exception:
+        return {
+            "needs_reply": True,
+            "suggested_reply": text,
+            "erro_parse": True,
+        }

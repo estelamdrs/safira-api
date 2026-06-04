@@ -151,5 +151,5 @@ SESSION_COOKIE_SECURE = False
 
 FRONTEND_URL = os.getenv("FRONTEND_URL")
 
-OLLAMA_URL = os.getenv("OLLAMA_URL")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")

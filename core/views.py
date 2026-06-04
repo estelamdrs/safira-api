@@ -20,6 +20,7 @@ from .services.gmail_service import (
     send_reply,
 )
 from .services.gemini_service import GeminiService
+from core.services.llama_service import summarize_email_llama, suggest_email_reply_llama
 
 @api_view(["GET"])
 def health_check(request):
@@ -267,6 +268,7 @@ def apply_gmail_label(request, message_id):
 
 @api_view(["POST"])
 def suggest_gmail_reply(request, message_id):
+    provider = request.data.get("provider", "gemini")
     creds_data = request.session.get("gmail_credentials")
 
     if not creds_data:
@@ -289,9 +291,13 @@ def suggest_gmail_reply(request, message_id):
             status=400,
         )
 
-    result = GeminiService().suggest_email_reply_gemini(subject, body)
+    if provider == "llama":
+        result = suggest_email_reply_llama(subject, body)
+    else:
+        result = GeminiService().suggest_email_reply_gemini(subject, body)
 
     return Response({
+        "provider": provider,
         "gmail_message_id": message_id,
         "subject": subject,
         "needs_reply": result.get("needs_reply", False),
