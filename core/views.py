@@ -4,8 +4,10 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from .models import EmailSummary
+from .models import EmailSummary, LLMPreferenceLog
 from django.conf import settings
+from core.services.llama_service import summarize_email_llama
+from django.db.models import Count
 
 from .services.google_auth import build_google_flow
 from .services.gmail_service import (
@@ -18,6 +20,7 @@ from .services.gmail_service import (
     send_reply,
 )
 from .services.gemini_service import GeminiService
+from core.services.llama_service import summarize_email_llama, suggest_email_reply_llama
 
 @api_view(["GET"])
 def health_check(request):
@@ -25,6 +28,7 @@ def health_check(request):
         "status": "ok",
         "message": "API do TCC funcionando com sucesso."
     })
+
 
 def gmail_auth(request):
     request.session.pop("gmail_credentials", None)
@@ -43,6 +47,7 @@ def gmail_auth(request):
     request.session["google_code_verifier"] = flow.code_verifier
 
     return redirect(authorization_url)
+
 
 def gmail_callback(request):
     state = request.session.get("google_oauth_state")
@@ -76,6 +81,7 @@ def gmail_callback(request):
 
     return redirect(f"{settings.FRONTEND_URL}/?gmail_connected=true")
 
+
 def gmail_messages(request):
     creds_data = request.session.get("gmail_credentials")
     if not creds_data:
@@ -106,6 +112,7 @@ def gmail_messages(request):
         "next_page_token": results["next_page_token"],
     })
 
+
 @api_view(["GET"])
 def gmail_status(request):
     creds_data = request.session.get("gmail_credentials")
@@ -113,6 +120,7 @@ def gmail_status(request):
     return Response({
         "connected": bool(creds_data)
     })
+
 
 @api_view(["POST"])
 def summarize_gmail_message(request, message_id):
@@ -214,6 +222,7 @@ def summarize_gmail_message(request, message_id):
         "from_cache": False
     })
 
+
 @api_view(["POST"])
 def gmail_disconnect(request):
     request.session.pop("gmail_credentials", None)
@@ -224,6 +233,7 @@ def gmail_disconnect(request):
         "message": "Conta Gmail desconectada com sucesso.",
         "connected": False,
     })
+
 
 @api_view(["POST"])
 def apply_gmail_label(request, message_id):
@@ -255,8 +265,10 @@ def apply_gmail_label(request, message_id):
         "label_applied": True,
     })
 
+
 @api_view(["POST"])
 def suggest_gmail_reply(request, message_id):
+    provider = request.data.get("provider", "gemini")
     creds_data = request.session.get("gmail_credentials")
 
     if not creds_data:
@@ -279,14 +291,19 @@ def suggest_gmail_reply(request, message_id):
             status=400,
         )
 
-    result = GeminiService().suggest_email_reply_gemini(subject, body)
+    if provider == "llama":
+        result = suggest_email_reply_llama(subject, body)
+    else:
+        result = GeminiService().suggest_email_reply_gemini(subject, body)
 
     return Response({
+        "provider": provider,
         "gmail_message_id": message_id,
         "subject": subject,
         "needs_reply": result.get("needs_reply", False),
         "suggested_reply": result.get("suggested_reply", ""),
     })
+
 
 @api_view(["POST"])
 def send_gmail_reply(request, message_id):
@@ -324,6 +341,147 @@ def send_gmail_reply(request, message_id):
         "success": True,
         "message": "Resposta enviada com sucesso.",
     })
+
+
+@api_view(["POST"])
+def summarize_email_llama_view(request):
+    subject = request.data.get("subject", "")
+    body = request.data.get("body", "")
+
+    if not body:
+        return Response(
+            {"error": "O campo body é obrigatório."},
+            status=400,
+        )
+    
+    try:
+        summary = summarize_email_llama(subject, body)
+
+        return Response({
+            "provider": "llama",
+            "model": "llama3.2",
+            "summary": summary,
+        })
+    except Exception as exc:
+        return Response(
+            {
+                "error": "Erro ao gerar resumo com Llama.",
+                "details": str(exc),
+            },
+            status=500,
+        )
+
+
+@api_view(["POST"])
+def compare_email_llms(request):
+    subject = request.data.get("subject", "")
+    body = request.data.get("body", "")
+    existing_labels = request.data.get("existing_labels", [])
+
+    if not body:
+        return Response(
+            {"error": "O campo body é obrigatório."},
+            status=400,
+        )
+
+    gemini_result = None
+    llama_result = None
+    errors = {}
+
+    try:
+        gemini_result = GeminiService().summarize_email_gemini(
+            subject=subject,
+            body=body,
+            existing_labels=existing_labels,
+        )
+    except Exception as exc:
+        errors["gemini"] = str(exc)
+
+    try:
+        llama_result = summarize_email_llama(
+            subject=subject,
+            body=body,
+            existing_labels=existing_labels,
+        )
+    except Exception as exc:
+        errors["llama"] = str(exc)
+
+    try:
+        llama_result = summarize_email_llama(
+            subject=subject,
+            body=body,
+            existing_labels=existing_labels,
+        )
+    except Exception as exc:
+        errors["llama"] = str(exc)
+
+    return Response({
+        "email": {
+            "subject": subject,
+        },
+        "results": {
+            "gemini": gemini_result,
+            "llama": llama_result,
+        },
+        "errors": errors,
+    })
+
+
+@api_view(["POST"])
+def register_llm_preference(request):
+    email_id = request.data.get("email_id")
+    provider = request.data.get("provider")
+    action = request.data.get("action")
+
+    if not all([email_id, provider, action]):
+        return Response(
+            {
+                "error": (
+                    "email_id, provider e action "
+                    "são obrigatórios."
+                )
+            },
+            status=400,
+        )
+
+    log = LLMPreferenceLog.objects.create(
+        email_id=email_id,
+        provider=provider,
+        action=action,
+    )
+
+    return Response(
+        {
+            "id": log.id,
+            "message": "Preferência registrada com sucesso.",
+        }
+    )
+
+
+@api_view(["GET"])
+def llm_preference_stats(request):
+    stats = (
+        LLMPreferenceLog.objects
+        .values("provider")
+        .annotate(total=Count("id"))
+        .order_by("provider")
+    )
+
+    result = {
+        "gemini": 0,
+        "llama": 0,
+        "total": 0,
+    }
+
+    for item in stats:
+        provider = item["provider"]
+        total = item["total"]
+
+        result[provider] = total
+        result["total"] += total
+
+    return Response(result)
+
 
 # Teste Gemini
 

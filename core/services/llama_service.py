@@ -1,22 +1,18 @@
-from google import genai
-from django.conf import settings
+import requests
 import json
 
+from django.conf import settings
 
-class GeminiService:
-    def __init__(self):
-        self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
-    def summarize_email_gemini(
-        self,
-        subject: str,
-        body: str,
-        existing_labels: list[str] | None = None
-    ) -> dict:
-        existing_labels = existing_labels or []
-        labels_text = "\n".join(f"- {label}" for label in existing_labels)
-
-        prompt = f"""
+def summarize_email_llama(
+    subject: str,
+    body: str,
+    existing_labels: list[str] | None = None
+) -> dict:
+    existing_labels = existing_labels or []
+    labels_text = "\n".join(f"- {label}" for label in existing_labels)
+    
+    prompt = f"""
         Você é a Safira, uma assistente inteligente de organização de e-mails.
 
         Sua função é analisar o conteúdo de um e-mail e produzir uma resposta estruturada para ajudar o usuário a entender, priorizar e organizar sua caixa de entrada.
@@ -67,6 +63,10 @@ class GeminiService:
         - Se o e-mail envolver TCC, orientação, universidade ou pesquisa, priorize "academico".
         - Se o e-mail for principalmente compartilhamento de arquivo, pasta, documento ou anexo, use "arquivos", salvo se houver contexto acadêmico ou financeiro mais forte.
 
+        Não escreva frases como "Aqui está o resumo".
+        Não coloque JSON dentro do campo resumo.
+        O campo resumo deve conter apenas o resumo textual do e-mail.
+
         Formato obrigatório:
         {{
         "resumo": "resumo em até 3 frases",
@@ -87,27 +87,50 @@ class GeminiService:
         {body}
         """
 
-        response = self.client.models.generate_content(
-            model="gemini-2.5-flash-lite",
-            contents=prompt,
-        )
+    payload = {
+        "model": settings.OLLAMA_MODEL,
+        "prompt": prompt,
+        "stream": False,
+    }
 
-        text = response.text.strip()
-        text = text.replace("```json", "").replace("```", "").strip()
+    response = requests.post(
+        settings.OLLAMA_URL,
+        json=payload,
+        timeout=90
+    )
+    response.raise_for_status()
 
-        try:
-            return json.loads(text)
-        except Exception:
-            return {
-                "resumo": response.text,
-                "urgente": False,
-                "motivo_urgencia": "Não foi possível determinar",
-                "categoria": "outro",
-                "erro_parse": True,
-            }
+    data = response.json()
+    text = data.get("response", "").strip()
+    text = text.replace("```json", "").replace("```", "").strip()
 
-    def suggest_email_reply_gemini(self, subject, body):
-        prompt = f"""
+    try:
+        parsed = json.loads(text)
+
+        if (
+            isinstance(parsed.get("resumo"), str)
+            and parsed["resumo"].strip().startswith("{")
+        ):
+            nested = json.loads(parsed["resumo"])
+            return nested
+
+        return parsed
+    except Exception:
+        return {
+            "resumo": text,
+            "urgente": False,
+            "motivo_urgencia": "Não foi possível determinar.",
+            "categoria": "outro",
+            "confianca": 0,
+            "justificativa_categoria": "A resposta do modelo não retornou JSON válido.",
+            "gmail_label": "Outro",
+            "usar_label_existente": False,
+            "erro_parse": True,
+        }
+
+
+def suggest_email_reply_llama(subject: str, body: str) -> dict:
+    prompt = f"""
         Você é uma assistente inteligente de e-mails.
 
         Sua tarefa é sugerir uma resposta educada, objetiva e coerente
@@ -136,16 +159,28 @@ class GeminiService:
         {body}
         """
 
-        response = self.client.models.generate_content(
-            model="gemini-2.5-flash-lite",
-            contents=prompt,
-        )
+    payload = {
+        "model": settings.OLLAMA_MODEL,
+        "prompt": prompt,
+        "stream": False,
+    }
 
-        cleaned_text = (
-            response.text
-            .replace("```json", "")
-            .replace("```", "")
-            .strip()
-        )
+    response = requests.post(
+        settings.OLLAMA_URL,
+        json=payload,
+        timeout=90,
+    )
+    response.raise_for_status()
 
-        return json.loads(cleaned_text)
+    data = response.json()
+    text = data.get("response", "").strip()
+    text = text.replace("```json", "").replace("```", "").strip()
+
+    try:
+        return json.loads(text)
+    except Exception:
+        return {
+            "needs_reply": True,
+            "suggested_reply": text,
+            "erro_parse": True,
+        }
