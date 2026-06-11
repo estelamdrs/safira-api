@@ -96,7 +96,7 @@ def summarize_email_llama(
     response = requests.post(
         settings.OLLAMA_URL,
         json=payload,
-        timeout=90
+        timeout=180
     )
     response.raise_for_status()
 
@@ -168,7 +168,7 @@ def suggest_email_reply_llama(subject: str, body: str) -> dict:
     response = requests.post(
         settings.OLLAMA_URL,
         json=payload,
-        timeout=90,
+        timeout=180,
     )
     response.raise_for_status()
 
