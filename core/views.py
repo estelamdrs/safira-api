@@ -55,7 +55,12 @@ def gmail_callback(request):
 
     if not state or not code_verifier:
         return JsonResponse(
-            {"error": "Sessão OAuth inválida ou expirada. Inicie a autenticação novamente."},
+            {
+                "error": (
+                    "Sessão OAuth inválida ou expirada. "
+                    "Inicie a autenticação novamente."
+                )
+            },
             status=400,
         )
 
@@ -79,7 +84,16 @@ def gmail_callback(request):
         "scopes": credentials.scopes,
     }
 
-    return redirect(f"{settings.FRONTEND_URL}/?gmail_connected=true")
+    request.session.modified = True
+    request.session.save()
+
+    session_key = request.session.session_key
+
+    return redirect(
+        f"{settings.FRONTEND_URL}/"
+        f"?gmail_connected=true"
+        f"&safira_session_key={session_key}"
+    )
 
 
 def gmail_messages(request):
