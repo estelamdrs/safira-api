@@ -1,13 +1,11 @@
-from django.http import JsonResponse
+import csv
+from django.http import JsonResponse, HttpResponse
 from django.shortcuts import redirect
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
 from .models import EmailSummary, LLMPreferenceLog
 from django.conf import settings
 from core.services.llama_service import summarize_email_llama
-from django.db.models import Count
 
 from .services.google_auth import build_google_flow
 from .services.gmail_service import (
@@ -512,62 +510,26 @@ def llm_preference_stats(request):
     for provider in ["gemini", "llama"]:
         queryset = LLMPreferenceLog.objects.filter(provider=provider)
 
-        total = queryset.count()
-
         result[provider] = {
-            "total": total,
-
-            "categoria_correta": queryset.filter(
-                category_correct=True
-            ).count(),
-
-            "categoria_incorreta": queryset.filter(
-                category_correct=False
-            ).count(),
-
-            "categoria_nao_avaliada": queryset.filter(
-                category_correct__isnull=True
-            ).count(),
-
-            "marcador_aplicado": queryset.filter(
-                label_applied=True
-            ).count(),
-
-            "marcador_nao_aplicado": queryset.filter(
-                label_applied=False
-            ).count(),
-
-            "resposta_enviada": queryset.filter(
-                reply_sent=True
-            ).count(),
-
-            "resposta_nao_enviada": queryset.filter(
-                reply_sent=False
-            ).count(),
-
-            "qualidade_resposta": {
-                "nao_usou": queryset.filter(
-                    reply_quality=LLMPreferenceLog.ReplyQuality.NAO_USOU
-                ).count(),
-                "boa": queryset.filter(
-                    reply_quality=LLMPreferenceLog.ReplyQuality.BOA
-                ).count(),
-                "regular": queryset.filter(
-                    reply_quality=LLMPreferenceLog.ReplyQuality.REGULAR
-                ).count(),
-                "ruim": queryset.filter(
-                    reply_quality=LLMPreferenceLog.ReplyQuality.RUIM
-                ).count(),
+            "total": queryset.count(),
+            "category_correct": queryset.filter(category_correct=True).count(),
+            "category_incorrect": queryset.filter(category_correct=False).count(),
+            "label_applied": queryset.filter(label_applied=True).count(),
+            "reply_sent": queryset.filter(reply_sent=True).count(),
+            "reply_quality": {
+                "nao_usou": queryset.filter(reply_quality="nao_usou").count(),
+                "boa": queryset.filter(reply_quality="boa").count(),
+                "regular": queryset.filter(reply_quality="regular").count(),
+                "ruim": queryset.filter(reply_quality="ruim").count(),
             },
         }
 
-        result["total"] += total
+        result["total"] += result[provider]["total"]
 
     return Response(result)
 
 
 # Teste Gemini
-
 @api_view(["POST"])
 def summarize_email(request):
     subject = request.data.get("subject", "")
@@ -596,3 +558,43 @@ def summarize_email(request):
             "urgente": email_summary.is_urgent,
         },
     })
+
+
+@api_view(["GET"])
+def export_llm_preference_logs_csv(request):
+    response = HttpResponse(
+        content_type="text/csv; charset=utf-8",
+    )
+
+    response["Content-Disposition"] = (
+        'attachment; filename="llm_preference_logs.csv"'
+    )
+
+    response.write("\ufeff")
+
+    writer = csv.writer(response)
+
+    writer.writerow([
+        "id",
+        "email_id",
+        "modelo",
+        "categoria_correta",
+        "aplicacao_marcador",
+        "qualidade_resposta",
+        "envio_resposta",
+    ])
+
+    logs = LLMPreferenceLog.objects.all().order_by("id")
+
+    for log in logs:
+        writer.writerow([
+            log.id,
+            log.email_id,
+            log.provider,
+            "" if log.category_correct is None else int(log.category_correct),
+            int(log.label_applied),
+            log.reply_quality,
+            int(log.reply_sent),
+        ])
+
+    return response

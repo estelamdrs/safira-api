@@ -14,7 +14,8 @@ from .views import (
     summarize_email_llama_view,
     compare_email_llms,
     register_llm_preference,
-    llm_preference_stats
+    llm_preference_stats,
+    export_llm_preference_logs_csv,
 )
 
 urlpatterns = [
@@ -64,4 +65,9 @@ urlpatterns = [
         "llm/stats/",
         llm_preference_stats,
         name='llm_preference_stats'),
+    path(
+        "llm/preferences/export-csv/",
+        export_llm_preference_logs_csv,
+        name="export_llm_preference_logs_csv",
+    ),
 ]
