@@ -1,11 +1,32 @@
 from google import genai
 from django.conf import settings
 import json
+import time
 
 
 class GeminiService:
     def __init__(self):
         self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
+    def _generate_with_retry(self, prompt: str, max_attempts: int = 3):
+        last_error = None
+
+        for attempt in range(max_attempts):
+            try:
+                return self.client.models.generate_content(
+                    model="gemini-2.5-flash-lite",
+                    contents=prompt,
+                )
+            except Exception as exc:
+                last_error = exc
+                error_text = str(exc)
+
+                if "503" not in error_text and "UNAVAILABLE" not in error_text:
+                    raise
+
+                time.sleep(2 ** attempt)
+
+        raise last_error
 
     def summarize_email_gemini(
         self,
@@ -87,10 +108,7 @@ class GeminiService:
         {body}
         """
 
-        response = self.client.models.generate_content(
-            model="gemini-2.5-flash-lite",
-            contents=prompt,
-        )
+        response = self._generate_with_retry(prompt)
 
         text = response.text.strip()
         text = text.replace("```json", "").replace("```", "").strip()
