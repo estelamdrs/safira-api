@@ -1,13 +1,11 @@
-from django.http import JsonResponse
+import csv
+from django.http import JsonResponse, HttpResponse
 from django.shortcuts import redirect
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
 from .models import EmailSummary, LLMPreferenceLog
 from django.conf import settings
 from core.services.llama_service import summarize_email_llama
-from django.db.models import Count
 
 from .services.google_auth import build_google_flow
 from .services.gmail_service import (
@@ -21,6 +19,24 @@ from .services.gmail_service import (
 )
 from .services.gemini_service import GeminiService
 from core.services.llama_service import summarize_email_llama, suggest_email_reply_llama
+
+PUBLIC_PROVIDER_TO_INTERNAL = {
+    "modelo_1": "gemini",
+    "modelo_2": "llama",
+}
+
+INTERNAL_PROVIDER_TO_PUBLIC = {
+    "gemini": "modelo_1",
+    "llama": "modelo_2",
+}
+
+def resolve_provider(public_provider: str) -> str | None:
+    return PUBLIC_PROVIDER_TO_INTERNAL.get(public_provider)
+
+
+def public_provider_name(internal_provider: str) -> str:
+    return INTERNAL_PROVIDER_TO_PUBLIC.get(internal_provider)
+
 
 @api_view(["GET"])
 def health_check(request):
@@ -282,7 +298,15 @@ def apply_gmail_label(request, message_id):
 
 @api_view(["POST"])
 def suggest_gmail_reply(request, message_id):
-    provider = request.data.get("provider", "gemini")
+    public_provider = request.data.get("provider", "modelo_1")
+    provider = resolve_provider(public_provider)
+
+    if not provider:
+        return Response(
+            {"error": "Provider inválido. Use 'modelo_1' ou 'modelo_2'."},
+            status=400,
+        )
+    
     creds_data = request.session.get("gmail_credentials")
 
     if not creds_data:
@@ -311,7 +335,7 @@ def suggest_gmail_reply(request, message_id):
         result = GeminiService().suggest_email_reply_gemini(subject, body)
 
     return Response({
-        "provider": provider,
+        "provider": public_provider_name(provider),
         "gmail_message_id": message_id,
         "subject": subject,
         "needs_reply": result.get("needs_reply", False),
@@ -420,31 +444,40 @@ def compare_email_llms(request):
     except Exception as exc:
         errors["llama"] = str(exc)
 
-    try:
-        llama_result = summarize_email_llama(
-            subject=subject,
-            body=body,
-            existing_labels=existing_labels,
-        )
-    except Exception as exc:
-        errors["llama"] = str(exc)
+    public_results = {
+        public_provider_name("gemini"): gemini_result,
+        public_provider_name("llama"): llama_result,
+    }
+
+    public_errors = {}
+
+    if "gemini" in errors:
+        public_errors[public_provider_name("gemini")] = errors["gemini"]
+
+    if "llama" in errors:
+        public_errors[public_provider_name("llama")] = errors["llama"]
 
     return Response({
         "email": {
             "subject": subject,
         },
-        "results": {
-            "gemini": gemini_result,
-            "llama": llama_result,
-        },
-        "errors": errors,
+        "results": public_results,
+        "errors": public_errors,
     })
 
 
 @api_view(["POST"])
 def register_llm_preference(request):
     email_id = request.data.get("email_id")
-    provider = request.data.get("provider")
+    public_provider = request.data.get("provider")
+    provider = resolve_provider(public_provider)
+
+    if not provider:
+        return Response(
+            {"error": "Provider inválido. Use 'modelo_1' ou 'modelo_2'."},
+            status=400,
+        )
+
     action = request.data.get("action")
 
     if not all([email_id, provider, action]):
@@ -458,48 +491,84 @@ def register_llm_preference(request):
             status=400,
         )
 
-    log = LLMPreferenceLog.objects.create(
+    log, _ = LLMPreferenceLog.objects.get_or_create(
         email_id=email_id,
         provider=provider,
-        action=action,
     )
 
-    return Response(
-        {
-            "id": log.id,
-            "message": "Preferência registrada com sucesso.",
-        }
-    )
+    if action == "category_ok":
+        log.category_correct = True
+
+    elif action == "category_not_ok":
+        log.category_correct = False
+
+    elif action == "apply_label":
+        log.label_applied = True
+
+    elif action == "reply_good":
+        log.reply_quality = LLMPreferenceLog.ReplyQuality.BOA
+
+    elif action == "reply_medium":
+        log.reply_quality = LLMPreferenceLog.ReplyQuality.REGULAR
+
+    elif action == "reply_bad":
+        log.reply_quality = LLMPreferenceLog.ReplyQuality.RUIM
+
+    elif action == "send_reply":
+        log.reply_sent = True
+
+    else:
+        return Response(
+            {"error": "Ação inválida."},
+            status=400,
+        )
+    
+    log.save()
+
+    return Response({
+        "id": log.id,
+        "email_id": log.email_id,
+        "provider": public_provider,
+        "category_correct": log.category_correct,
+        "label_applied": log.label_applied,
+        "reply_quality": log.reply_quality,
+        "reply_sent": log.reply_sent,
+        "message": "Log atualizado com sucesso.",
+    })
 
 
 @api_view(["GET"])
 def llm_preference_stats(request):
-    stats = (
-        LLMPreferenceLog.objects
-        .values("provider", "action")
-        .annotate(total=Count("id"))
-        .order_by("provider", "action")
-    )
-
     result = {
-        "gemini": {},
-        "llama": {},
+        "modelo_1": {},
+        "modelo_2": {},
         "total": 0,
     }
 
-    for item in stats:
-        provider = item["provider"]
-        action = item["action"]
-        total = item["total"]
+    for provider in ["gemini", "llama"]:
+        public_provider = public_provider_name(provider)
+        queryset = LLMPreferenceLog.objects.filter(provider=provider)
 
-        result[provider][action] = total
-        result["total"] += total
+        result[public_provider] = {
+            "total": queryset.count(),
+            "category_correct": queryset.filter(category_correct=True).count(),
+            "category_incorrect": queryset.filter(category_correct=False).count(),
+            "label_applied": queryset.filter(label_applied=True).count(),
+            "reply_sent": queryset.filter(reply_sent=True).count(),
+            "reply_quality": {
+                "nao_usou": queryset.filter(reply_quality="nao_usou").count(),
+                "boa": queryset.filter(reply_quality="boa").count(),
+                "regular": queryset.filter(reply_quality="regular").count(),
+                "ruim": queryset.filter(reply_quality="ruim").count(),
+            },
+        }
+
+        result["total"] += result[public_provider]["total"]
 
     return Response(result)
 
 
 # Teste Gemini
-
 @api_view(["POST"])
 def summarize_email(request):
     subject = request.data.get("subject", "")
@@ -528,3 +597,43 @@ def summarize_email(request):
             "urgente": email_summary.is_urgent,
         },
     })
+
+
+@api_view(["GET"])
+def export_llm_preference_logs_csv(request):
+    response = HttpResponse(
+        content_type="text/csv; charset=utf-8",
+    )
+
+    response["Content-Disposition"] = (
+        'attachment; filename="llm_preference_logs.csv"'
+    )
+
+    response.write("\ufeff")
+
+    writer = csv.writer(response)
+
+    writer.writerow([
+        "id",
+        "email_id",
+        "modelo",
+        "categoria_correta",
+        "aplicacao_marcador",
+        "qualidade_resposta",
+        "envio_resposta",
+    ])
+
+    logs = LLMPreferenceLog.objects.all().order_by("id")
+
+    for log in logs:
+        writer.writerow([
+            log.id,
+            log.email_id,
+            log.provider,
+            "" if log.category_correct is None else int(log.category_correct),
+            int(log.label_applied),
+            log.reply_quality,
+            int(log.reply_sent),
+        ])
+
+    return response
