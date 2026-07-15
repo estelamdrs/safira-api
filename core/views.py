@@ -20,6 +20,24 @@ from .services.gmail_service import (
 from .services.gemini_service import GeminiService
 from core.services.llama_service import summarize_email_llama, suggest_email_reply_llama
 
+PUBLIC_PROVIDER_TO_INTERNAL = {
+    "modelo_1": "gemini",
+    "modelo_2": "llama",
+}
+
+INTERNAL_PROVIDER_TO_PUBLIC = {
+    "gemini": "modelo_1",
+    "llama": "modelo_2",
+}
+
+def resolve_provider(public_provider: str) -> str | None:
+    return PUBLIC_PROVIDER_TO_INTERNAL.get(public_provider)
+
+
+def public_provider_name(internal_provider: str) -> str:
+    return INTERNAL_PROVIDER_TO_PUBLIC.get(internal_provider)
+
+
 @api_view(["GET"])
 def health_check(request):
     return Response({
@@ -280,7 +298,15 @@ def apply_gmail_label(request, message_id):
 
 @api_view(["POST"])
 def suggest_gmail_reply(request, message_id):
-    provider = request.data.get("provider", "gemini")
+    public_provider = request.data.get("provider", "modelo_1")
+    provider = resolve_provider(public_provider)
+
+    if not provider:
+        return Response(
+            {"error": "Provider inválido. Use 'modelo_1' ou 'modelo_2'."},
+            status=400,
+        )
+    
     creds_data = request.session.get("gmail_credentials")
 
     if not creds_data:
@@ -309,7 +335,7 @@ def suggest_gmail_reply(request, message_id):
         result = GeminiService().suggest_email_reply_gemini(subject, body)
 
     return Response({
-        "provider": provider,
+        "provider": public_provider_name(provider),
         "gmail_message_id": message_id,
         "subject": subject,
         "needs_reply": result.get("needs_reply", False),
@@ -418,22 +444,40 @@ def compare_email_llms(request):
     except Exception as exc:
         errors["llama"] = str(exc)
 
+    public_results = {
+        public_provider_name("gemini"): gemini_result,
+        public_provider_name("llama"): llama_result,
+    }
+
+    public_errors = {}
+
+    if "gemini" in errors:
+        public_errors[public_provider_name("gemini")] = errors["gemini"]
+
+    if "llama" in errors:
+        public_errors[public_provider_name("llama")] = errors["llama"]
+
     return Response({
         "email": {
             "subject": subject,
         },
-        "results": {
-            "gemini": gemini_result,
-            "llama": llama_result,
-        },
-        "errors": errors,
+        "results": public_results,
+        "errors": public_errors,
     })
 
 
 @api_view(["POST"])
 def register_llm_preference(request):
     email_id = request.data.get("email_id")
-    provider = request.data.get("provider")
+    public_provider = request.data.get("provider")
+    provider = resolve_provider(public_provider)
+
+    if not provider:
+        return Response(
+            {"error": "Provider inválido. Use 'modelo_1' ou 'modelo_2'."},
+            status=400,
+        )
+
     action = request.data.get("action")
 
     if not all([email_id, provider, action]):
@@ -444,12 +488,6 @@ def register_llm_preference(request):
                     "são obrigatórios."
                 )
             },
-            status=400,
-        )
-    
-    if provider not in ["gemini", "llama"]:
-        return Response(
-            {"error": "Provider inválido. Use 'gemini' ou 'llama'."},
             status=400,
         )
 
