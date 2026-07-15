@@ -528,7 +528,7 @@ def register_llm_preference(request):
     return Response({
         "id": log.id,
         "email_id": log.email_id,
-        "provider": log.provider,
+        "provider": public_provider,
         "category_correct": log.category_correct,
         "label_applied": log.label_applied,
         "reply_quality": log.reply_quality,
@@ -540,15 +540,16 @@ def register_llm_preference(request):
 @api_view(["GET"])
 def llm_preference_stats(request):
     result = {
-        "gemini": {},
-        "llama": {},
+        "modelo_1": {},
+        "modelo_2": {},
         "total": 0,
     }
 
     for provider in ["gemini", "llama"]:
+        public_provider = public_provider_name(provider)
         queryset = LLMPreferenceLog.objects.filter(provider=provider)
 
-        result[provider] = {
+        result[public_provider] = {
             "total": queryset.count(),
             "category_correct": queryset.filter(category_correct=True).count(),
             "category_incorrect": queryset.filter(category_correct=False).count(),
@@ -562,7 +563,7 @@ def llm_preference_stats(request):
             },
         }
 
-        result["total"] += result[provider]["total"]
+        result["total"] += result[public_provider]["total"]
 
     return Response(result)
 
