@@ -420,15 +420,6 @@ def compare_email_llms(request):
     except Exception as exc:
         errors["llama"] = str(exc)
 
-    try:
-        llama_result = summarize_email_llama(
-            subject=subject,
-            body=body,
-            existing_labels=existing_labels,
-        )
-    except Exception as exc:
-        errors["llama"] = str(exc)
-
     return Response({
         "email": {
             "subject": subject,
