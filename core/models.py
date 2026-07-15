@@ -14,40 +14,56 @@ class EmailSummary(models.Model):
         return self.subject or "E-mail sem assunto"
 
 class LLMPreferenceLog(models.Model):
-    PROVIDERS = [
-        ("gemini", "Gemini"),
-        ("llama", "Llama"),
-    ]
+    class Provider(models.TextChoices):
+        GEMINI = "gemini", "Gemini"
+        LLAMA = "llama", "Llama"
 
-    ACTIONS = [
-        ("apply_label", "Apply Label"),
-        ("send_reply", "Send Reply"),
-        ("category_ok", "Categoria correta"),
-        ("category_not_ok", "Categoria incorreta"),
-        ("reply_good", "Resposta boa"),
-        ("reply_medium", "Resposta média"),
-        ("reply_bad", "Resposta ruim"),
-    ]
+    class ReplyQuality(models.TextChoices):
+        NAO_USOU = "nao_usou", "Não usou"
+        BOA = "boa", "Boa"
+        REGULAR = "regular", "Regular"
+        RUIM = "ruim", "Ruim"
 
     email_id = models.CharField(max_length=255)
 
     provider = models.CharField(
         max_length=20,
-        choices=PROVIDERS,
+        choices=Provider.choices,
     )
 
-    action = models.CharField(
-        max_length=30,
-        choices=ACTIONS,
+    category_correct = models.BooleanField(
+        null=True,
+        blank=True,
+    )
+
+    label_applied = models.BooleanField(
+        default=False,
     )
 
     created_at = models.DateTimeField(
         auto_now_add=True,
     )
 
+    reply_quality = models.CharField(
+        max_length=20,
+        choices=ReplyQuality.choices,
+        default=ReplyQuality.NAO_USOU,
+    )
+
+    reply_sent = models.BooleanField(
+        default=False,
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["email_id", "provider"],
+                name="unique_llm_log_per_email_provider",
+            )
+        ]
+
     def __str__(self):
-        return (
-            f"{self.provider} - "
-            f"{self.action} - "
-            f"{self.email_id}"
-        )
+        return f"{self.email_id} - {self.provider}"

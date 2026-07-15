@@ -448,42 +448,119 @@ def register_llm_preference(request):
             },
             status=400,
         )
+    
+    if provider not in ["gemini", "llama"]:
+        return Response(
+            {"error": "Provider inválido. Use 'gemini' ou 'llama'."},
+            status=400,
+        )
 
-    log = LLMPreferenceLog.objects.create(
+    log, _ = LLMPreferenceLog.objects.get_or_create(
         email_id=email_id,
         provider=provider,
-        action=action,
     )
 
-    return Response(
-        {
-            "id": log.id,
-            "message": "Preferência registrada com sucesso.",
-        }
-    )
+    if action == "category_ok":
+        log.category_correct = True
+
+    elif action == "category_not_ok":
+        log.category_correct = False
+
+    elif action == "apply_label":
+        log.label_applied = True
+
+    elif action == "reply_good":
+        log.reply_quality = LLMPreferenceLog.ReplyQuality.BOA
+
+    elif action == "reply_medium":
+        log.reply_quality = LLMPreferenceLog.ReplyQuality.REGULAR
+
+    elif action == "reply_bad":
+        log.reply_quality = LLMPreferenceLog.ReplyQuality.RUIM
+
+    elif action == "send_reply":
+        log.reply_sent = True
+
+    else:
+        return Response(
+            {"error": "Ação inválida."},
+            status=400,
+        )
+    
+    log.save()
+
+    return Response({
+        "id": log.id,
+        "email_id": log.email_id,
+        "provider": log.provider,
+        "category_correct": log.category_correct,
+        "label_applied": log.label_applied,
+        "reply_quality": log.reply_quality,
+        "reply_sent": log.reply_sent,
+        "message": "Log atualizado com sucesso.",
+    })
 
 
 @api_view(["GET"])
 def llm_preference_stats(request):
-    stats = (
-        LLMPreferenceLog.objects
-        .values("provider", "action")
-        .annotate(total=Count("id"))
-        .order_by("provider", "action")
-    )
-
     result = {
         "gemini": {},
         "llama": {},
         "total": 0,
     }
 
-    for item in stats:
-        provider = item["provider"]
-        action = item["action"]
-        total = item["total"]
+    for provider in ["gemini", "llama"]:
+        queryset = LLMPreferenceLog.objects.filter(provider=provider)
 
-        result[provider][action] = total
+        total = queryset.count()
+
+        result[provider] = {
+            "total": total,
+
+            "categoria_correta": queryset.filter(
+                category_correct=True
+            ).count(),
+
+            "categoria_incorreta": queryset.filter(
+                category_correct=False
+            ).count(),
+
+            "categoria_nao_avaliada": queryset.filter(
+                category_correct__isnull=True
+            ).count(),
+
+            "marcador_aplicado": queryset.filter(
+                label_applied=True
+            ).count(),
+
+            "marcador_nao_aplicado": queryset.filter(
+                label_applied=False
+            ).count(),
+
+            "resposta_enviada": queryset.filter(
+                reply_sent=True
+            ).count(),
+
+            "resposta_nao_enviada": queryset.filter(
+                reply_sent=False
+            ).count(),
+
+            "qualidade_resposta": {
+                "nao_usou": queryset.filter(
+                    reply_quality=LLMPreferenceLog.ReplyQuality.NAO_USOU
+                ).count(),
+                "boa": queryset.filter(
+                    reply_quality=LLMPreferenceLog.ReplyQuality.BOA
+                ).count(),
+                "regular": queryset.filter(
+                    reply_quality=LLMPreferenceLog.ReplyQuality.REGULAR
+                ).count(),
+                "ruim": queryset.filter(
+                    reply_quality=LLMPreferenceLog.ReplyQuality.RUIM
+                ).count(),
+            },
+        }
+
         result["total"] += total
 
     return Response(result)
